@@ -50,7 +50,7 @@ doctl registry login &&\
 
 Leaning heavily on this [article](https://www.digitalocean.com/community/tutorials/how-to-set-up-an-elasticsearch-fluentd-and-kibana-efk-logging-stack-on-kubernetes) for configuring ElasticSearch, Fluentd, and Kibana.
 
-### Reading List
+### Reading / Watching List
 
 - [Video on Service Types](https://www.youtube.com/watch?v=T4Z7visMM4E)
 
