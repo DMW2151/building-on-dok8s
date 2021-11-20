@@ -35,7 +35,7 @@ resource "digitalocean_kubernetes_cluster" "core-dev" {
 
   node_pool {
     name       = "k8s-default"
-    size       = "s-2vcpu-2gb"
+    size       = "s-2vcpu-4gb"
     auto_scale = true
     min_nodes  = 3
     max_nodes  = 5
