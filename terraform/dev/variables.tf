@@ -1,5 +1,5 @@
 
 variable "deployer_or_whitelisted_cidr_range" {
   type        = string
-  description = "The IP of the deployer (or an otherwise whitelisted CIDR range)"
+  description = "An IP or CIDR range to whitelist for SSH into the core VPC jump instance"
 }

@@ -1,0 +1,49 @@
+##
+## Starter Kit configuration for Loki stack
+##
+loki:
+  enabled: true
+  config:
+    schema_config:
+      configs:
+        - from: "2020-10-24"
+          store: boltdb-shipper
+          object_store: aws
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /data/loki/boltdb-shipper-active
+        cache_location: /data/loki/boltdb-shipper-cache
+        cache_ttl: 24h
+        shared_store: aws
+      aws:
+        bucketnames: dmw2151-maps
+        endpoint: https://nyc3.digitaloceanspaces.com
+        region: nyc3
+        s3forcepathstyle: true
+ 
+promtail:
+  enabled: true
+
+  # Enable Promtail service monitoring
+  serviceMonitor:
+    enabled: true
+
+  # User defined pipeline stages
+  pipelineStages:
+    - docker: {}
+    - drop:
+        source: namespace
+        expression: "kube-.*"
+
+fluent-bit:
+  enabled: false
+
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: false

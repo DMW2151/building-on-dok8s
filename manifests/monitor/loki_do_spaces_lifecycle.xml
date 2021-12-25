@@ -1,0 +1,19 @@
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Rule>
+    <ID>Expire Loki Logs 'fake' folder data</ID>
+    <Prefix>fake/</Prefix>
+    <Status>Enabled</Status>
+    <Expiration>
+      <Days>14</Days>
+    </Expiration>
+  </Rule>
+
+  <Rule>
+    <ID>Expire Loki Logs 'index' folder data</ID>
+    <Prefix>index/</Prefix>
+    <Status>Enabled</Status>
+    <Expiration>
+      <Days>14</Days>
+    </Expiration>
+  </Rule>
+</LifecycleConfiguration>

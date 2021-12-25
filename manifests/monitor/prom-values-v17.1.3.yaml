@@ -1,0 +1,70 @@
+##
+## Starter Kit configuration for Prometheus stack
+##
+
+## Create default rules for monitoring the cluster
+#
+# Disable `etcd` and `kubeScheduler` rules (managed by DOKS, so metrics are not accesible)
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeScheduler: false
+
+## Component scraping kube scheduler
+##
+# Disabled because it's being managed by DOKS, so it's not accessible
+kubeScheduler:
+  enabled: false
+
+## Component scraping etcd
+##
+# Disabled because it's being managed by DOKS, so it's not accessible
+kubeEtcd:
+  enabled: false
+
+## Configuration for alertmanager
+## ref: https://prometheus.io/docs/alerting/alertmanager/
+##
+alertmanager:
+  ## Deploy alertmanager
+  ##
+  enabled: true
+
+## Using default values from https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+## [WARN] Please change the default password in production !!!
+grafana:
+  enabled: true
+  adminPassword: prom-operator
+
+## Manages Prometheus and Alertmanager components
+prometheusOperator:
+  enabled: true
+
+## Deploy a Prometheus instance - Starter Kit components service monitors
+prometheus:
+  enabled: true
+
+  # Enable Promtail service monitoring
+    - name: "promtail-monitor"
+      selector:
+        matchLabels:
+          app: promtail
+          release: loki
+      namespaceSelector:
+        matchNames:
+          - monitoring
+      endpoints:
+        - port: "http-metrics"
+
+  # Prometheus StorageSpec for persistent data - Starter Kit setup for DigitalOcean Block Storage
+  # ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/user-guides/storage.md
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: do-block-storage
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
