@@ -2,8 +2,7 @@
 ## Starter Kit configuration for Prometheus stack
 ##
 
-## Create default rules for monitoring the cluster
-#
+# Create default rules for monitoring the cluster
 # Disable `etcd` and `kubeScheduler` rules (managed by DOKS, so metrics are not accesible)
 defaultRules:
   create: true
@@ -11,41 +10,61 @@ defaultRules:
     etcd: false
     kubeScheduler: false
 
-## Component scraping kube scheduler
-##
+# Component scraping kube scheduler
 # Disabled because it's being managed by DOKS, so it's not accessible
 kubeScheduler:
   enabled: false
 
-## Component scraping etcd
-##
+# Component scraping etcd
 # Disabled because it's being managed by DOKS, so it's not accessible
 kubeEtcd:
   enabled: false
 
-## Configuration for alertmanager
-## ref: https://prometheus.io/docs/alerting/alertmanager/
-##
+# Configuration for alertmanager
+# ref: https://prometheus.io/docs/alerting/alertmanager/
 alertmanager:
   ## Deploy alertmanager
-  ##
   enabled: true
 
-## Using default values from https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
-## [WARN] Please change the default password in production !!!
+# Using default values from https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
 grafana:
   enabled: true
-  adminPassword: prom-operator
+  adminPassword: prom-operator # Please change the default password in production !!!
 
-## Manages Prometheus and Alertmanager components
+# Manages Prometheus and Alertmanager components
 prometheusOperator:
   enabled: true
 
-## Deploy a Prometheus instance - Starter Kit components service monitors
+# Deploy a Prometheus instance
 prometheus:
   enabled: true
+                                
+  additionalServiceMonitors:
 
-  # Enable Promtail service monitoring
+    # Assumes a Loki Deployment - See readme.md
+    - name: "loki-monitor"
+      selector:
+        matchLabels:
+          app: loki
+          release: loki
+      namespaceSelector:
+        matchNames:
+          - monitoring
+      endpoints:
+        - port: "http-metrics"
+    
+    # Assumes a Redis Deployment w. Metric Exporter - See readme.md
+    - name: "redis-monitor"
+      selector:
+        matchLabels:
+          service: "redis-metrics"
+      namespaceSelector:
+        matchNames:
+          - redis
+      endpoints:
+        - port: "http-metrics"
+    
+    # Assumes Promtail Enabled - See readme.md
     - name: "promtail-monitor"
       selector:
         matchLabels:
@@ -57,8 +76,9 @@ prometheus:
       endpoints:
         - port: "http-metrics"
 
-  # Prometheus StorageSpec for persistent data - Starter Kit setup for DigitalOcean Block Storage
+  # Prometheus StorageSpec for persistent data
   # ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/user-guides/storage.md
+  
   prometheusSpec:
     storageSpec:
       volumeClaimTemplate:

@@ -1,6 +1,5 @@
-##
-## Starter Kit configuration for Loki stack
-##
+# Starter Kit configuration for Loki stack
+
 loki:
   enabled: true
   config:
@@ -39,11 +38,14 @@ promtail:
         source: namespace
         expression: "kube-.*"
 
+# Disabled; Using Promtail 
 fluent-bit:
   enabled: false
 
+# Disabled; Already Configured as part of Prometheus stack
 grafana:
   enabled: false
 
+# Disabled; Already Configured as part of Prometheus stack
 prometheus:
   enabled: false
