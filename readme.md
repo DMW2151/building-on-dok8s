@@ -2,16 +2,19 @@
 
 This repo is for learning managed K8s on Digital Ocean as part of the [Digital Ocean K8s Challenege](lhttps://www.digitalocean.com/community/pages/kubernetes-challenge). I'm quite new to K8s, and to get up to speed I'll be working through [Digital Ocean's K8s Developer Starter](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers) and referencing other resources as needed.
 
-With that in mind, this document will not be so much of a traditional Readme, but my moreso build notes as I learn both Digital Ocean and K8s.
+With that in mind, this document will not be so much of a traditional Readme. Instead, I'll present my build notes as I learn both Digital Ocean and K8s.
 
 The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s, but I'd also like to try to deploy a trivial application to interact with Redis and get some basic observability into the performance of the Redis cluster and the K8s cluster as a whole. This will involve building out a cluster with the following resources:
 
-- [x] A multi-node Redis cluster service
-- [x] Logging services (e.g Prometheus, Grafana, and Loki)
-- [x] Core API Service to communicate w. Redis
-- [x] A build pipeline (or at least some Terraform to spin up the K8s cluster)
+- [ ] **A multi-node, highly available Redis cluster**
+- [ ] **A build pipeline (or at least some Terraform to spin up the K8s cluster)**
+- [ ] Core API Service to communicate w. Redis
+- [ ] Logging services (e.g Prometheus, Grafana, and Loki)
 
-This document will cover the first of those bullets. Time permitting, I will have supplemental [deployment notes](./deployment_notes.md) which will cover the remaining bullets.
+This document will cover the first of those bullets (and maybe the second). I have supplemental deployment notes which will cover the remaining bullets
+
+- [Part 2 - Application Deployment](./app_deployment_notes.md)
+- [Part 3 - Logging Services Deployment](./logs_deployment_notes)
 
 ## Provisioning Digital Ocean K8s with Terraform
 
@@ -137,10 +140,11 @@ BITNAMI_REDIS_CHART_VERSION="15.6.8"
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
 # Note that `helm upgrade` requires slightly different parameters
-helm install redis bitnami/redis \
+helm upgrade redis bitnami/redis \
   --create-namespace \
   --namespace redis \
   --version "$BITNAMI_REDIS_CHART_VERSION" \
+  --set auth.password=$REDIS_PASSWORD \
   --values ./manifests/redis/values-production.yaml
 ```
 
@@ -237,7 +241,7 @@ drwxrws--- 2 root 1001 16K Dec 24 19:25 lost+found
 
 ### Testing Metrics Export
 
-To confirm that there's a metrics exporter running, I'll port-forward `9121` of `svc/redis-metrics` to my local machine and `tail` the `/metrics` endpoint to show the `redis_uptime_in_seconds` metric. I wait a moment and run the command again to find the value has increased by a few seconds. 
+To confirm that there's a metrics exporter running, I'll port-forward `9121` of `svc/redis-metrics` to my local machine and `tail` the `/metrics` endpoint to show the `redis_uptime_in_seconds` metric. I wait a moment and run the command again to find the value has increased by a few seconds.
 
 ```bash
 # Port forward `svc/redis-metrics` (i.e. the metrics exporter) -> localhost
@@ -256,7 +260,7 @@ curl --silent -XGET http://localhost:9121/metrics | tail -n 1
 redis_uptime_in_seconds 5692
 ```
 
-Looks good to me!
+Looks good to me! We'll really test this out later when I configure Prometheus, Grafana, and Loki (see Day 3).
 
 ### Testing Sentinel FailOver
 
@@ -290,6 +294,4 @@ Excellent, this suggests that our "new" node has joined the cluster as a slave o
 
 ## Conclusion
 
-From my perspective, this is a great starting point for learning K8s. For the purposes of the Digital Ocean K8s Challenge, this is where I'll end.
-
-As I mentioned earlier, I'd like to build logging, monitoring, and a simple application on top of this Redis cluster. I'm sure that will reveal any glaring flaws in this configuration. The notes for that ongoing work are [here](./deployment_notes.md).
+From my perspective, this is a great starting point for learning K8s. For the purposes of the Digital Ocean K8s Challenge, this is where I'll end. As I mentioned earlier, I'd like to build logging, monitoring, and a simple application on top of this Redis cluster. I'm sure that will reveal any glaring flaws in this configuration.

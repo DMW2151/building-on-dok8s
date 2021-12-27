@@ -132,6 +132,8 @@ commonConfiguration: |-
   # Enable AOF https://redis.io/topics/persistence#append-only-file
   # Enable RDB persistence (After 60 seconds if at least 10000 keys changed)
   appendonly yes
+  save 3600 1
+  save 300 100
   save 60 10000
 ## @param existingConfigmap The name of an existing ConfigMap with your custom configuration for Redis&trade; nodes
 ##
@@ -1176,6 +1178,7 @@ metrics:
   ##
   podAnnotations:
     prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
     prometheus.io/port: "9121"
   ## Redis&trade; exporter service parameters
   ##
@@ -1229,7 +1232,7 @@ metrics:
     metricRelabelings: []
     ## @param metrics.serviceMonitor.honorLabels Specify honorLabels parameter to add the scrape endpoint
     ##
-    honorLabels: false
+    honorLabels: true
     ## @param metrics.serviceMonitor.additionalLabels Additional labels that can be used so ServiceMonitor resource(s) can be discovered by Prometheus
     ##
     additionalLabels: {}
@@ -1242,7 +1245,7 @@ metrics:
     enabled: false
     ## @param metrics.prometheusRule.namespace The namespace in which the prometheusRule will be created
     ##
-    namespace: "redis"
+    namespace: ""
     ## @param metrics.prometheusRule.additionalLabels Additional labels for the prometheusRule
     ##
     additionalLabels: {}

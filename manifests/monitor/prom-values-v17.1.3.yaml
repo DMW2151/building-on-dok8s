@@ -63,7 +63,8 @@ prometheus:
           - redis
       endpoints:
         - port: "http-metrics"
-    
+          path: /metrics
+          
     # Assumes Promtail Enabled - See readme.md
     - name: "promtail-monitor"
       selector:

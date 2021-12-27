@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  # Cert-Manager will put the resulting Secret in the same Kubernetes namespace as the Certificate.
+  name: maphub.dev
+  namespace: backend
+spec:
+  # Secret name to create, where the private key and certificate should be stored.
+  secretName: maphub.dev
+  # What Issuer to use for getting the certificate.
+  issuerRef:
+    name: letsencrypt-nginx-wcard
+    kind: Issuer
+    group: cert-manager.io
+  # Common name to be used on the Certificate.
+  commonName: "*.maphub.dev"
+  # List of DNS subjectAltNames to be set on the Certificate.
+  dnsNames:
+    - "maphub.dev"
+    - "*.maphub.dev"

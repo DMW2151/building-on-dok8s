@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-backend
+  namespace: backend
+spec:
+  tls:
+    - hosts:
+        - "*.maphub.dev"
+      secretName: maphub.dev
+  rules:
+    - host: echo.maphub.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: echo
+                port:
+                  number: 8080
+    - host: button.maphub.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: button
+                port:
+                  number: 2151
+  ingressClassName: nginx
