@@ -120,7 +120,7 @@ commonConfiguration: |-
 
 #### Metrics and Monitoring
 
-In [deployment notes](./deployment_notes.md), I'll discuss scraping metrics from a Redis Prometheus exporter and configuring them to send to Grafana. For the time being, I'll ignore any nuance here and just enable `metrics`.
+In [logging deployment notes](./logs_deployment_notes.md), I'll discuss scraping metrics from a Redis Prometheus exporter and configuring them to send to Grafana. For the time being, I'll ignore any nuance here and just enable `metrics`.
 
 ```yaml
 # values-production.yaml
