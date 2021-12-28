@@ -1,29 +1,27 @@
-# Setting Up Ingress, Deploying First Apps, using Private Registry
+# Supplemental Deployment Notes - Setting Up Ingress, Deploying First Apps, using Private Registry
 
 ## Intro
 
-This repo is for learning managed K8s on Digital Ocean as part of the [Digital Ocean K8s Challenege](lhttps://www.digitalocean.com/community/pages/kubernetes-challenge). I'm quite new to K8s, and to get up to speed I'll be working through [Digital Ocean's K8s Developer Starter](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers) and referencing other resources as needed.
+![foo](./_imgs/app.png)
 
-The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s, but I'd also like to try to deploy a trivial application to interact with Redis and get some basic observability into the performance of the Redis cluster and the K8s cluster as a whole. This will involve building out a cluster with the following resources:
+This repo is for learning managed K8s on Digital Ocean as part of the [Digital Ocean K8s Challenege](lhttps://www.digitalocean.com/community/pages/kubernetes-challenge). The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s, but I'd also like to try to deploy a trivial application to interact with Redis and get some basic observability into the performance of the Redis cluster and the K8s cluster as a whole. This will involve building out a cluster with the following resources:
 
 - [x] A multi-node, highly available Redis cluster
 - [x] A build pipeline (or at least some Terraform to spin up the K8s cluster)
 - [ ] **Core API Service to communicate w. Redis**
 - [ ] Logging services (e.g Prometheus, Grafana, and Loki)
 
-This document will cover the third of these bullets. I have supplemental deployment notes which will cover the remaining bullets
+This document will cover the process of using configuring ingress, DNS, and DOCR to release the core services for my dummy application. Also see:
 
-- [Part 1 - Deploying K8s and H.A. Redis](./app_deployment_notes.md)
+- [Part 1 - Deploying K8s and H.A. Redis](./readme.md)
 - [Part 3 - Deploying Logging Services](./logs_deployment_notes)
 
 ## Setting Up Ingress and Deploying an Application to K8s
 
-For this section I'm following along pretty closely with the DigitalOcean Day 2 Operations Guide. I would strongly recommend referring to the following sections:
+For this section I'm following along with the DigitalOcean Day 2 Operations Guide. I would strongly recommend referring to the following sections from that guide:
 
 - [Configuring DOCR](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/blob/main/02-setup-DOCR/README.md)
 - [Configuring An Ingress Controller](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/tree/main/03-setup-ingress-controller)
-
-I chose to proceed through this section using Nginx because I have at least *some* experience working with Nginx configurations outside of K8s. Ambassador is a relatively new option as an ingress controller, and I wanted to keep the "new things" I was exposing myself to this week to a manageable level.
 
 The goals for this section are as follows:
 
@@ -49,13 +47,15 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
 
 As with most files throughout this project, I made some slight modifications to what the guide provided. In this case, however, I ended up returning to this chart and upgrading it several times due to mistakes I made.
 
-- My first mistake was uncommenting the `sysctl` commands in the reference yaml file, these (theoretically) can improve Nginx performance, but at the scale I'm operating at, they're not worth the additional complexity.  
+- My first mistake was un-commenting the `sysctl` commands in the reference yaml file, these (theoretically) can improve Nginx performance, but at the scale I'm operating at, they're not worth the additional complexity to allow.
 
 - Later, I found that I was unable to access a backend service that I configured because of a stray annotation in [nginx-values-v4.0.6.yaml](./manifests/ingress/nginx-values-v4.0.6.yaml). It seems this [issue](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/issues/91) speaks to the trouble I was having, but I still don't quite understand the explanation given [here](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/blob/main/03-setup-ingress-controller/nginx.md#step-6---enabling-proxy-protocol) with respect to a L4 LB? Why does that matter. Doesn't DO create an L7 LB?
 
+The details of configuring ingress will be handled later in this section, for now, it appears I've been able to create a load balancer which takes traffic from the internet and directs it into my cluster.
+
 ## Moving A Site to DOK8S and Deploying a Sample Application
 
-I've held `maphub.dev` for about a year for a few toy projects, this is the only domain I own that I can fiddle with, so I [moved the nameservers](https://www.digitalocean.com/community/tutorials/how-to-point-to-digitalocean-nameservers-from-common-domain-registrars) over to Digital Ocean and proceeded to create records associating our recently created load balancer with `echo.maphub.dev` as suggested in the Developer Guide.
+Now that (I think) I have ingress working, let's deploy an application. `maphub.dev` is a domain I use for my toy projects; I [moved the nameservers](https://www.digitalocean.com/community/tutorials/how-to-point-to-digitalocean-nameservers-from-common-domain-registrars) over to Digital Ocean and proceeded to create records associating our recently created load balancer with `echo.maphub.dev` as suggested in the Developer Guide.
 
 ```bash
 # Reference: doctl version 1.64.0-release
@@ -68,14 +68,14 @@ doctl compute domain records create maphub.dev \
     --record-ttl "30"
 ```
 
-I ran `curl -XGET http://echo.maphub.dev` and checked the logs of the `ingress-nginx` pod to confirm traffic was being routed into the cluster. There are two glaring problems, both of which I'll address in the coming sections.
+I ran `curl -XGET http://echo.maphub.dev` and checked the logs of the `ingress-nginx` pod to confirm traffic was being routed into the cluster. However, there are two obvious problems:
 
-- `echo.maphub.dev` points to a load balancer, but resolves to no actual service. We need to create an `echo` service.
+- `echo.maphub.dev` resolves to a load balancer IP, but then points to no actual service. We need to create an `echo` service.
 - `http://echo.maphub.dev` is not doing any SSL termination, we'd like our controller to allow for `https` requests to our domain.
 
 ## Deploying an Application
 
-Following along with the Developer's Guide, I deployed a token application to `echo.maphub.dev` into a newly created namespace, `backend`. The `*.yaml` files for this test application are in `./manifests/test-application/`, but are largely superseded by the subsequent sections. The important thing for this section was that the following returned `200`.
+Following along with the Developer's Guide, I deployed a token application to `echo.maphub.dev` into a newly created namespace, `backend`. The `*.yaml` files for this application are in `./manifests/test-application/`, but are largely superseded by the subsequent sections. The important thing for this section was that the following returned `200`.
 
 ```bash
 # curl request to our new service - using HTTP
@@ -92,7 +92,7 @@ The same day, I also deployed two more practical applications:
 
 - A [deployment](https://github.com/DMW2151/expert-garbanzo/tree/feature/vanilla-redis/hslservices/cmd/mqtt) that ingests data from an MQTT stream and writes events to Redis. This deployment is not exposed to the outside world and is just a single pod listening for updates from a remote address (see: [mqtt-ingestion](./manifests/mqtt-ingestion/mqtt_broker_deployment.yaml)).
 
-- A service that reads the keys that `mqtt-ingestion` set. This service is exposed to the outside world (for now) at `https://hsl.maphub.dev/locations/<route_number>`
+- An [api](./helsinki-app) that reads the keys that `mqtt-ingestion` set. This service is exposed to the outside world (for now) at `https://hsl.maphub.dev/locations/<route_number>`
 
 To prevent this post from dragging on further, I'll present my notes for the above inline without much comment...
 
@@ -125,10 +125,6 @@ docker build . -t hsl &&\
     docker tag hsl registry.digitalocean.com/dmw2151-internal/hsl &&\
     docker push registry.digitalocean.com/dmw2151-internal/hsl
 
-kubectl rollout restart deployment hsl-api -n backend  
-
-kubectl rollout restart deployment mqtt-redis-connector -n backend  
-
 # Apply deployment for ingestion service
 kubectl apply -f ./manifests/mqtt-ingestion/mqtt_broker_deployment.yaml
 
@@ -139,7 +135,9 @@ kubectl apply -f ./manifests/hsl/hsl_deployment.yaml \
 
 ## Handling for SSL Termination
 
-This section and the preceeding sections blurred together a bit. I found myself circling back to this section to make updates a few times. I'll present this as if I knew what I was doing from the start (i.e. starting with the expectation of needing a wildcard cert). I followed along with this [manual](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/blob/main/03-setup-ingress-controller/guides/wildcard_certificates.md#installing-cert-manager), and will try to note the key points below.
+This section and the preceding sections blurred together a bit. I found myself circling back to make updates on the API, the ingress controller, etc.
+
+I'll present this as if I knew what I was doing from the start (i.e. starting with the expectation of needing a wildcard cert). I followed along with this [manual](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers/blob/main/03-setup-ingress-controller/guides/wildcard_certificates.md#installing-cert-manager), and will try to note the key points below.
 
 ```bash
 # Applied a Helm chart for Cert-Manager
@@ -153,7 +151,7 @@ helm upgrade cert-manager jetstack/cert-manager --version "$CERT_MANAGER_HELM_CH
   -f "./manifests/ingress/cert-manager-values-v${CERT_MANAGER_HELM_CHART_VERSION}.yaml"
 ```
 
-[Cert Manager](https://cert-manager.io/docs/concepts/) relies on a series of custom resources (CRD) to get a cert from a CA. One of the unique elements of this process is that Cert-Manager needs to be able to control the DNS records for a domain. As a result, I create a secret (my D.O token) and pass it into the cluster for CM to reference.
+[Cert Manager](https://cert-manager.io/docs/concepts/) relies on a series of custom resources (CRD) to get a cert from a CA (Let's Encrypt). One of the unique elements of this process is that Cert-Manager needs to be able to control the DNS records for a domain. As a result, I create a secret (my D.O token) and pass it into the cluster for CM to reference.
 
 ```bash
 # Add DO Token as Secret for CM to manage DNS records
@@ -161,17 +159,17 @@ kubectl create secret generic "digitalocean-dns" \
   --namespace backend \
   --from-literal=access-token="$DO_API_TOKEN"
 
-# Apply Issuer
+# Apply Issuer - CRD
 kubectl apply -f ./manifests/ingress/cert-manager-nginx-issuer.yaml
 
-# Apply Cert
+# Apply Cert - CRD
 kubectl apply -f ./manifests/ingress/cert-manager-nginx-certificate.yaml
 
 # Apply Ingress Rules
 kubectl apply -f ./manifests/ingress/cert-manager-nginx-certificate.yaml
 ```
 
-I now had the certs in place that allowed me to make HTTPS requests to my endpoint....
+I now had the certs in place that allowed me to make HTTPS requests to my endpoint...
 
 ```bash
 
@@ -183,15 +181,19 @@ content-type: application/json
 content-length: 44
 
 {
-  "Route": "107",
+  "Route": "1081",
   "Status": "OK",
-  "Vehicles": []
+  "Vehicles": [
+    {
+      "Lat": 60.19092399,
+      "Lng": 25.025364
+    },
+    {
+      "Lat": 60.20278099,
+      "Lng": 25.03221595
+    }
+  ]
 }
 ```
 
-
-## Misc
-
-- [Nginx Metrics](https://docs.nginx.com/nginx-ingress-controller/logging-and-monitoring/prometheus/)
-
-cross namespace 
+Excellent. Day 2 in the books!

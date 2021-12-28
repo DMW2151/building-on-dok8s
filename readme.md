@@ -2,8 +2,6 @@
 
 This repo is for learning managed K8s on Digital Ocean as part of the [Digital Ocean K8s Challenege](lhttps://www.digitalocean.com/community/pages/kubernetes-challenge). I'm quite new to K8s, and to get up to speed I'll be working through [Digital Ocean's K8s Developer Starter](https://github.com/digitalocean/Kubernetes-Starter-Kit-Developers) and referencing other resources as needed.
 
-With that in mind, this document will not be so much of a traditional Readme. Instead, I'll present my build notes as I learn both Digital Ocean and K8s.
-
 The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s, but I'd also like to try to deploy a trivial application to interact with Redis and get some basic observability into the performance of the Redis cluster and the K8s cluster as a whole. This will involve building out a cluster with the following resources:
 
 - [ ] **A multi-node, highly available Redis cluster**
@@ -11,14 +9,14 @@ The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s
 - [ ] Core API Service to communicate w. Redis
 - [ ] Logging services (e.g Prometheus, Grafana, and Loki)
 
-This document will cover the first of those bullets (and maybe the second). I have supplemental deployment notes which will cover the remaining bullets
+This document will cover the first of those bullets (and maybe the second). I have supplemental deployment notes that will cover the remaining bullets.
 
 - [Part 2 - Application Deployment](./app_deployment_notes.md)
 - [Part 3 - Logging Services Deployment](./logs_deployment_notes)
 
 ## Provisioning Digital Ocean K8s with Terraform
 
-I'm a big fan of Terraform and will use it to manage the core infrastructure of the cluster. I'm using a DO spaces backend to store my state file. As much as I love spinning up *every* resource with Terraform, the DO Space to initialize Terraform's state (obviously) must be an exception to this rule. Initializing Terraform with DO Spaces was not too difficult as [Spaces is S3 compatible](https://www.digitalocean.com/products/spaces/).
+I'm a big fan of Terraform and will use it to manage the core infrastructure of the cluster. I'm using a DO spaces backend to store my state file. As much as I love spinning up *every* resource with Terraform, the DO Space to initialize Terraform's state (obviously) must be an exception. Initializing Terraform with DO Spaces was not too difficult as [Spaces is S3 compatible](https://www.digitalocean.com/products/spaces/).
 
 I initialize the Terraform backend and provision a K8s cluster in a newly-created VPC on DO with the following commands and variables.
 
@@ -27,7 +25,7 @@ terraform init \
   -input=false \
   -backend-config=backend.tfvars
 
-terraform plan \
+terraform apply \
   -var-file k8s_cluster.tfvars
 ```
 
@@ -43,14 +41,9 @@ skip_credentials_validation = true
 skip_metadata_api_check     = true
 ```
 
-```bash
-# k8s_cluster.tfvars
-...
-```
-
 The full list of modules, variables, outputs, and resources provisioned by Terraform are available within the Terraform [Readme](./terraform/dev/readme.md). For those who are interested, these are auto-generated via the [terraform-docs](https://terraform-docs.io/user-guide/introduction/) utility.
 
-The plan runs in about 6-8 min. Once it's successfully run, I configure my local machine to use the context for the newly provisioned cluster. In a more serious deployment, we'd likely want to lock this down a bit more, but for my purposes today, this is fine.
+The plan runs in about 6-8 min. Once it's successfully run, I configure my local machine to use the context for the newly provisioned cluster. In a more serious deployment, we'd likely want to lock this down a bit more, but for my purposes, this is fine.
 
 ```bash
 export DIGITALOCEAN__CLUSTER_ID=`(terraform output cluster-id | cut -d':' -f3 | sed 's/\"//g')`
@@ -61,15 +54,15 @@ doctl kubernetes cluster kubeconfig save $DIGITALOCEAN__CLUSTER_ID
 
 [Redis](https://redis.io/) is an open source in-memory data structure store used as a database, cache, and message broker. Redis provides high availability via [Redis Sentinel](https://redis.io/topics/sentinel) and automatic partitioning with [Redis Cluster](https://redis.io/topics/cluster-tutorial).
 
-For this deployment, I want to make sure that the service is highly available and that data is durable between instances. I'll make a few choices when deploying the `bitnami` Redis Cluster [Helm chart](https://github.com/bitnami/charts/tree/master/bitnami/redis) which I'll highlight as I go.
+For this deployment, I want to make sure that the service is highly available and that data is durable between instances. I'll make a few choices when deploying the `bitnami` Redis Sentinel [Helm chart](https://github.com/bitnami/charts/tree/master/bitnami/redis) which I'll highlight as I go.
 
 ### Configuring Redis
 
 #### High Availability
 
-Using the Helm Chart values from [Bitnami](https://raw.githubusercontent.com/bitnami/charts/master/bitnami/redis/values.yaml) as a starting point, I looked to improve cluster availability, persistence, logging, and monitoring.
+Using the Helm Chart from [Bitnami](https://raw.githubusercontent.com/bitnami/charts/master/bitnami/redis/values.yaml) as a starting point, I looked to improve cluster availability, persistence, logging, and monitoring.
 
-To allow for high-availability, I enabled the most basic Sentinel [configuration](https://redis.io/topicssentinel#example-2-basic-setup-with-three-boxes) possible. Under this configuration, each pod runs a Sentinel (S) container and a Redis (R) container, with one of the pods acting as a master node (M) which replicates all writes to the other nodes.
+To allow for high-availability, I enabled a basic Sentinel [configuration](https://redis.io/topicssentinel#example-2-basic-setup-with-three-boxes). Under this configuration, each pod runs a Sentinel (S) container and a Redis (R) container, with one of the pods acting as a master node (M) that replicates all writes to the other nodes.
 
 ```bash
 # Basic Sentinel Deployment - configuration: quorum = 2
@@ -88,7 +81,7 @@ To allow for high-availability, I enabled the most basic Sentinel [configuration
 ```
 
 ```yaml
-# values-production.yaml
+# redis-values-production.yaml
 
 sentinel:
   ## @param sentinel.enabled Use Redis&trade; Sentinel on Redis&trade; pods.
@@ -106,9 +99,9 @@ While Redis is traditionally used as an in-memory cache or messaging bus, Redis 
 For the sake of argument, let's assume our application data cannot tolerate a few minutes of data loss (e.g. RDB only). I enable both mode with the following options.
 
 ```yaml
-# values-production.yaml
+# redis-values-production.yaml
 
-# Enable AOF and RDB persistence See:
+# Enable AOF and RDB persistence See syntax for RDB dump frequency at links below:
 #   - https://redis.io/topics/persistence#append-only-file
 #   - https://raw.githubusercontent.com/redis/redis/6.2/redis.conf
 commonConfiguration: |-
@@ -123,7 +116,7 @@ commonConfiguration: |-
 In [logging deployment notes](./logs_deployment_notes.md), I'll discuss scraping metrics from a Redis Prometheus exporter and configuring them to send to Grafana. For the time being, I'll ignore any nuance here and just enable `metrics`.
 
 ```yaml
-# values-production.yaml
+# redis-values-production.yaml
 
 ## @param metrics.enabled Start a sidecar prometheus exporter to expose Redis&trade; metrics
 metrics:
@@ -132,7 +125,7 @@ metrics:
 
 ### Deploying Redis
 
-Let's deploy the Helm chart with the following `helm repo add` and `helm install` commands.
+Finally, let's deploy the Helm chart with the following `helm repo add` and `helm install` commands.
 
 ```bash
 BITNAMI_REDIS_CHART_VERSION="15.6.8"
@@ -140,7 +133,7 @@ BITNAMI_REDIS_CHART_VERSION="15.6.8"
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
 # Note that `helm upgrade` requires slightly different parameters
-helm upgrade redis bitnami/redis \
+helm install redis bitnami/redis \
   --create-namespace \
   --namespace redis \
   --version "$BITNAMI_REDIS_CHART_VERSION" \
@@ -196,6 +189,7 @@ kubectl exec \
   --namespace redis \
   redis-node-0 -- /bin/sh -c 'export REDISCLI_AUTH=$REDIS_PASSWORD; redis-cli -c INFO replication'
 
+# Confirmed!
 role:master
 connected_slaves:2
 slave0:ip=redis-node-1.redis-headless.redis.svc.cluster.local,port=6379,state=online,offset=723454,lag=1
@@ -221,7 +215,7 @@ SET foo bar EX 3600
 I can also confirm these nodes read values set in `redis-node-0` . In this case, I check that the key `foo` I is both present and ticking closer to expiration on `redis-node-1`
 
 ```bash
-# On `redis-node-1` (or any node)
+# On `redis-node-1` (or any node, including the current master, `redis-node-0`)
 GET foo
 "bar"
 
@@ -229,7 +223,7 @@ TTL foo
 (integer) 3479
 ```
 
-Finally, I'd like to check persistance. To do this, I check the contents of the `/data` folder. I see both an `*.aof` file and a `*.rdb` file. As an additional test, I could fire off several thousand writes to make sure they are updating, but for the time being this is satisfactory.
+Finally, I'd like to check persistance. To do this, I check the contents of the `/data` folder. I see both an `*.aof` file and a `*.rdb` file. Three days later, after my application was live, I came back to this step to confirm that the relative sizes of the AOF and RDB files made sense. My application manages at most ~3000 keys at a time, but can receive upwards of 1500 writes/s. Seems these ratios (rougly) make sense.
 
 ```bash
 $ ls -lh /data
@@ -265,11 +259,11 @@ curl --silent -XGET http://localhost:9121/metrics | tail -n 1
 redis_uptime_in_seconds 5692
 ```
 
-Looks good to me! We'll really test this out later when I configure Prometheus, Grafana, and Loki (see Day 3).
+Looks good to me! We'll really test this out later when I configure Prometheus, Grafana, and Loki.
 
 ### Testing Sentinel FailOver
 
-I'd also like to test cluster failover with Sentinel by killing the current master node. There may be a more elegant way to do this, but nothing makes as much sense to me as just coming in with a `kubectl delete`
+I'd also like to test cluster failover with Sentinel by killing the current master node. There may be a more elegant way to do this, but nothing makes as much sense to me as just coming in with a `kubectl delete`!
 
 ```bash
 kubectl delete pod redis-node-0 \
@@ -295,7 +289,7 @@ master_host:redis-node-1.redis-headless.redis.svc.cluster.local
 master_port:6379
 ```
 
-Excellent, this suggests that our "new" node has joined the cluster as a slave of `redis-node-1.redis-headless.redis.svc.cluster.local`. Just as writes were initially restricted to `redis-node-0`, I'd now expect writes to be restrited to `redis-node-1`.
+Excellent, this suggests that our "new" node has joined the cluster as a slave of `redis-node-1.redis-headless.redis.svc.cluster.local`. Just as writes were initially restricted to `redis-node-0`, I'd now expect writes to be restricted to `redis-node-1`.
 
 ## Conclusion
 
