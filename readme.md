@@ -145,7 +145,7 @@ helm upgrade redis bitnami/redis \
   --namespace redis \
   --version "$BITNAMI_REDIS_CHART_VERSION" \
   --set auth.password=$REDIS_PASSWORD \
-  --values ./manifests/redis/values-production.yaml
+  --values ./manifests/redis/redis-values-production.yaml
 ```
 
 A few minutes after a successful deployment, I can verify that all expected services, statefulsets, and containers are up and running.
@@ -237,6 +237,11 @@ total 24K
 -rw-r--r-- 1 1001 1001 176 Dec 24 23:36 appendonly.aof
 -rw-r--r-- 1 1001 1001 175 Dec 24 22:26 dump.rdb
 drwxrws--- 2 root 1001 16K Dec 24 19:25 lost+found
+
+# I came back 3 days later to confirm -> notice the relative sizes of AOF and RDB..
+-rw-r--r-- 1 1001 1001 19M Dec 27 19:15 appendonly.aof
+-rw-r--r-- 1 1001 1001 27K Dec 27 19:11 dump.rdb
+drwxrws--- 2 root 1001 16K Dec 25 18:26 lost+found
 ```
 
 ### Testing Metrics Export

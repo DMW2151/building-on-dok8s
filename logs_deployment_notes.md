@@ -28,7 +28,7 @@ helm upgrade kube-prom-stack prometheus-community/kube-prometheus-stack \
   -f "./manifests/monitor/prom-values-v${PROM_HELM_CHART_VERSION}.yaml"
 ```
 
-With the storage configuration I'm using (see: `storageSpec`) a new Digital Ocean Volume is created as a persistent volume for Prometheus to store metric history.
+With the storage configuration I'm using (see: `storageSpec`) a new Digital Ocean Volume is created as a persistent volume for Prometheus to store metric history. 
 
 ### Adding Loki
 
@@ -62,4 +62,22 @@ s3cmd setlifecycle \
 
 kubectl port-forward svc/kube-prom-stack-kube-prome-prometheus 9090:9090 -n monitoring
 
-expect to see redis, loki, and promtail...
+expect to see redis, loki, and promtail. This section proved to be quite challenging, although I could get loki and promtail showing, configuring the servicemonitor for redis took multiple attempts
+
+
+```
+- name: "redis-monitor"
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: metrics
+```
+
+```bash
+kubectl get svc --selector=app.kubernetes.io/component=metrics -n redis
+```
+
+or the `podAnnotations` in the redis config...
+
+### Misc.
+
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.4.2/components.yaml

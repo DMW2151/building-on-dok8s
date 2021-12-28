@@ -19,14 +19,14 @@ spec:
                 name: echo
                 port:
                   number: 8080
-    - host: button.maphub.dev
+    - host: hsl.maphub.dev
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: button
+                name: hsl-api
                 port:
                   number: 2151
   ingressClassName: nginx

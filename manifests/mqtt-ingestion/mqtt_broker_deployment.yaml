@@ -1,0 +1,53 @@
+---
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: mqtt-redis-connector
+    namespace: backend
+  spec:
+
+    replicas: 1
+
+    selector:
+      matchLabels:
+        app: mqtt-redis-connector
+    strategy:
+
+      type: RollingUpdate
+
+    template:
+      metadata:
+        labels:
+          app: mqtt-redis-connector
+      spec:
+        containers:
+          - name: mqtt-redis-connector
+            image: registry.digitalocean.com/dmw2151-internal/hsl-redis-bridge
+            # ports: 
+            #   - name: http
+            #     containerPort: 2151
+            env:
+              - name: MQTT_TOPIC
+                value: "/hfp/v2/journey/ongoing/vp/+/+/+/+/+/+/+/+/0/#"
+              - name: MQTT_BROKER
+                value: "mqtt.hsl.fi"
+              - name: MQTT_PORT
+                value: "8883"
+              - name: REDIS_HOST
+                value: "redis.redis"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_DB
+                value: "0"
+              - name: REDISCLI_AUTH
+                valueFrom:
+                  secretKeyRef:
+                    name: redisauth
+                    key: redisclientauth
+            resources:
+              requests:
+                cpu: 100m
+                memory: 50Mi
+              limits:
+                cpu: 200m
+                memory: 100Mi

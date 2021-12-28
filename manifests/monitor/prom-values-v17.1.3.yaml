@@ -41,6 +41,17 @@ prometheus:
                                 
   additionalServiceMonitors:
 
+    # Assumes an Ambassador Deployment - Shouldn't Show up
+    - name: "ambassador-monitor"
+      selector:
+        matchLabels:
+          service: "ambassador-admin"
+      namespaceSelector:
+        matchNames:
+          - ambassador
+      endpoints:
+        - port: "ambassador-admin"
+
     # Assumes a Loki Deployment - See readme.md
     - name: "loki-monitor"
       selector:
@@ -52,19 +63,22 @@ prometheus:
           - monitoring
       endpoints:
         - port: "http-metrics"
+          path: /metrics
+          scheme: http
     
     # Assumes a Redis Deployment w. Metric Exporter - See readme.md
     - name: "redis-monitor"
       selector:
         matchLabels:
-          service: "redis-metrics"
+          app.kubernetes.io/component: metrics
       namespaceSelector:
         matchNames:
           - redis
       endpoints:
         - port: "http-metrics"
-          path: /metrics
-          
+    
+    
+              
     # Assumes Promtail Enabled - See readme.md
     - name: "promtail-monitor"
       selector:

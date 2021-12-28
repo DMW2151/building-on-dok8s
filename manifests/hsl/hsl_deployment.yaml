@@ -2,7 +2,7 @@
   apiVersion: apps/v1
   kind: Deployment
   metadata:
-    name: button
+    name: hsl-api
     namespace: backend
   spec:
 
@@ -10,7 +10,7 @@
 
     selector:
       matchLabels:
-        app: button
+        app: hsl-api
     strategy:
 
       type: RollingUpdate
@@ -18,11 +18,11 @@
     template:
       metadata:
         labels:
-          app: button
+          app: hsl-api
       spec:
         containers:
-          - name: button
-            image: registry.digitalocean.com/dmw2151-internal/ttlbutton
+          - name: hsl-api
+            image: registry.digitalocean.com/dmw2151-internal/hsl
             ports: 
               - name: http
                 containerPort: 2151
