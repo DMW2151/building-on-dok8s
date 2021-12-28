@@ -41,17 +41,6 @@ prometheus:
                                 
   additionalServiceMonitors:
 
-    # Assumes an Ambassador Deployment - Shouldn't Show up
-    - name: "ambassador-monitor"
-      selector:
-        matchLabels:
-          service: "ambassador-admin"
-      namespaceSelector:
-        matchNames:
-          - ambassador
-      endpoints:
-        - port: "ambassador-admin"
-
     # Assumes a Loki Deployment - See readme.md
     - name: "loki-monitor"
       selector:
