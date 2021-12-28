@@ -12,7 +12,7 @@ The goal is to deploy a scalable NoSQL database (I'll be using Redis) within K8s
 This document will cover the first of those bullets (and maybe the second). I have supplemental deployment notes that will cover the remaining bullets.
 
 - [Part 2 - Application Deployment](./app_deployment_notes.md)
-- [Part 3 - Logging Services Deployment](./logs_deployment_notes)
+- [Part 3 - Logging Services Deployment](./logs_deployment_notes.md)
 
 ## Provisioning Digital Ocean K8s with Terraform
 
