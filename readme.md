@@ -13,10 +13,11 @@ This document will cover the first of those bullets (and maybe the second). I ha
 
 - [Part 2 - Application Deployment](./app_deployment_notes.md)
 - [Part 3 - Logging Services Deployment](./logs_deployment_notes.md)
+- [Video](https://www.youtube.com/watch?v=6hQe78wCR7Q)
 
 ## Provisioning Digital Ocean K8s with Terraform
 
-I'm a big fan of Terraform and will use it to manage the core infrastructure of the cluster. I'm using a DO spaces backend to store my state file. As much as I love spinning up *every* resource with Terraform, the DO Space to initialize Terraform's state (obviously) must be an exception. Initializing Terraform with DO Spaces was not too difficult as [Spaces is S3 compatible](https://www.digitalocean.com/products/spaces/).
+I'm a big fan of Terraform and will use it to manage the core infrastructure of the K8s cluster. I'm using a DO spaces backend to store my state file. As much as I love spinning up *every* resource with Terraform, the DO Space to initialize Terraform's state (obviously) must be an exception. Initializing Terraform with DO Spaces was not too difficult as [Spaces is S3 compatible](https://www.digitalocean.com/products/spaces/).
 
 I initialize the Terraform backend and provision a K8s cluster in a newly-created VPC on DO with the following commands and variables.
 
@@ -43,7 +44,7 @@ skip_metadata_api_check     = true
 
 The full list of modules, variables, outputs, and resources provisioned by Terraform are available within the Terraform [Readme](./terraform/dev/readme.md). For those who are interested, these are auto-generated via the [terraform-docs](https://terraform-docs.io/user-guide/introduction/) utility.
 
-The plan runs in about 6-8 min. Once it's successfully run, I configure my local machine to use the context for the newly provisioned cluster. In a more serious deployment, we'd likely want to lock this down a bit more, but for my purposes, this is fine.
+The plan runs in about 6-8 min and once it finished, I configured my local machine to use the context for the newly provisioned cluster.
 
 ```bash
 export DIGITALOCEAN__CLUSTER_ID=`(terraform output cluster-id | cut -d':' -f3 | sed 's/\"//g')`
@@ -54,7 +55,7 @@ doctl kubernetes cluster kubeconfig save $DIGITALOCEAN__CLUSTER_ID
 
 [Redis](https://redis.io/) is an open source in-memory data structure store used as a database, cache, and message broker. Redis provides high availability via [Redis Sentinel](https://redis.io/topics/sentinel) and automatic partitioning with [Redis Cluster](https://redis.io/topics/cluster-tutorial).
 
-For this deployment, I want to make sure that the service is highly available and that data is durable between instances. I'll make a few choices when deploying the `bitnami` Redis Sentinel [Helm chart](https://github.com/bitnami/charts/tree/master/bitnami/redis) which I'll highlight as I go.
+For this deployment, I want to make sure that the service is highly available and that data is replicated between instances. I'll make a few choices when deploying the `bitnami` Redis Sentinel [Helm chart](https://github.com/bitnami/charts/tree/master/bitnami/redis) which I'll highlight as I go.
 
 ### Configuring Redis
 
@@ -113,7 +114,7 @@ commonConfiguration: |-
 
 #### Metrics and Monitoring
 
-In [logging deployment notes](./logs_deployment_notes.md), I'll discuss scraping metrics from a Redis Prometheus exporter and configuring them to send to Grafana. For the time being, I'll ignore any nuance here and just enable `metrics`.
+In [logging deployment notes](./logs_deployment_notes.md), I'll discuss scraping metrics from a Redis Prometheus exporter and configuring them to send to Grafana. For the time being, I'll ignore any nuance here and just enable `metrics`. Done!
 
 ```yaml
 # redis-values-production.yaml
@@ -141,7 +142,7 @@ helm install redis bitnami/redis \
   --values ./manifests/redis/redis-values-production.yaml
 ```
 
-A few minutes after a successful deployment, I can verify that all expected services, statefulsets, and containers are up and running.
+A few minutes after a successful deployment, I can verify that all expected services, statefulsets, and pods are up and running.
 
 ```bash
 # Check all resources in namespace
@@ -176,7 +177,7 @@ The next step I'd like to take to confirm that my deployment went properly is to
 2. The slave nodes disallow writes
 3. Redis' AOF and RDB files are present at `/data`
 
-I strongly suspect that `redis-node-0` will start as our master node. I'll `kubectl exec` into this pod and use the redis-cli command, `INFO` to confirm this.
+I strongly suspect that `redis-node-0` will start as our master node. I'll `kubectl exec` into this pod and use the `redis-cli` to confirm this.
 
 ```bash
 export REDIS_PASSWORD=$(kubectl get secret --namespace redis redis -o jsonpath="{.data.redis-password}" | base64 --decode)
@@ -189,50 +190,43 @@ kubectl exec \
   --namespace redis \
   redis-node-0 -- /bin/sh -c 'export REDISCLI_AUTH=$REDIS_PASSWORD; redis-cli -c INFO replication'
 
-# Confirmed!
+# Confirmed! INFO returns `role:master`
 role:master
 connected_slaves:2
 slave0:ip=redis-node-1.redis-headless.redis.svc.cluster.local,port=6379,state=online,offset=723454,lag=1
 slave1:ip=redis-node-2.redis-headless.redis.svc.cluster.local,port=6379,state=online,offset=723672,lag=1
 ```
 
-Beautiful, I can now use the same pattern as above, changing only the `redis-cli` command, to confirm the master can execute writes.
+Beautiful, I can now use the same pattern as above, changing only the `redis-cli` command, to run additional tests.
 
 ```bash
-# On `redis-node-0`
+# On `redis-node-0`; set a key to confirm the master can execute writes.
 SET foo bar EX 3600
 OK
 ```
 
-By changing `redis-node-0` to `redis-node-1`, I can confirm that no other node can receive writes.
-
 ```bash
-# On `redis-node-1` (or any node except the current master, `redis-node-0`)
+# On `redis-node-1` (or any node except the current master, `redis-node-0`), confirm that no other node can receive writes.
 SET foo bar EX 3600
 "(error) READONLY You can't write against a read only replica."
 ```
 
-I can also confirm these nodes read values set in `redis-node-0` . In this case, I check that the key `foo` I is both present and ticking closer to expiration on `redis-node-1`
-
 ```bash
-# On `redis-node-1` (or any node, including the current master, `redis-node-0`)
+# On `redis-node-1` (or any node, including the current master, `redis-node-0`), check the key we just set is present 
 GET foo
 "bar"
 
+# ... and ticking closer to expiration
 TTL foo
 (integer) 3479
 ```
 
-Finally, I'd like to check persistance. To do this, I check the contents of the `/data` folder. I see both an `*.aof` file and a `*.rdb` file. Three days later, after my application was live, I came back to this step to confirm that the relative sizes of the AOF and RDB files made sense. My application manages at most ~3000 keys at a time, but can receive upwards of 1500 writes/s. Seems these ratios (rougly) make sense.
+Finally, I'd like to check persistance. To do this, I `exec` into the same pod with `/bin/sh` instead of the `redis-cli` and check the contents of the `/data` folder. If see both an `*.aof` file and a `*.rdb` file, I can be confident both are running as expected.
 
 ```bash
-$ ls -lh /data
-total 24K
--rw-r--r-- 1 1001 1001 176 Dec 24 23:36 appendonly.aof
--rw-r--r-- 1 1001 1001 175 Dec 24 22:26 dump.rdb
-drwxrws--- 2 root 1001 16K Dec 24 19:25 lost+found
+# I came back 3 days later to confirm this -> notice the relative sizes of AOF and RDB, AOF is 1000x RDB because my test application has a small number of keys, but (relatively) frequent writes/key
+ls -lh /data
 
-# I came back 3 days later to confirm -> notice the relative sizes of AOF and RDB..
 -rw-r--r-- 1 1001 1001 19M Dec 27 19:15 appendonly.aof
 -rw-r--r-- 1 1001 1001 27K Dec 27 19:11 dump.rdb
 drwxrws--- 2 root 1001 16K Dec 25 18:26 lost+found
@@ -240,7 +234,7 @@ drwxrws--- 2 root 1001 16K Dec 25 18:26 lost+found
 
 ### Testing Metrics Export
 
-To confirm that there's a metrics exporter running, I'll port-forward `9121` of `svc/redis-metrics` to my local machine and `tail` the `/metrics` endpoint to show the `redis_uptime_in_seconds` metric. I wait a moment and run the command again to find the value has increased by a few seconds.
+To confirm that there's a metrics exporter running, I'll port-forward `9121` of `svc/redis-metrics` to my local machine and `tail` the `/metrics` endpoint to show the `redis_uptime_in_seconds` metric.
 
 ```bash
 # Port forward `svc/redis-metrics` (i.e. the metrics exporter) -> localhost
@@ -263,9 +257,10 @@ Looks good to me! We'll really test this out later when I configure Prometheus, 
 
 ### Testing Sentinel FailOver
 
-I'd also like to test cluster failover with Sentinel by killing the current master node. There may be a more elegant way to do this, but nothing makes as much sense to me as just coming in with a `kubectl delete`!
+Finally, I'd like to test cluster failover with Sentinel by killing the current master node. There may be a more elegant way to do this, but nothing makes as much sense to me as a very blunt `kubectl delete`!
 
 ```bash
+# Kill the current master-node...
 kubectl delete pod redis-node-0 \
   --namespace redis
 ```
@@ -284,6 +279,7 @@ redis-node-2   3/3     Running   0          23m
 Using the same `INFO replication` command from [earlier](###Testing%20Redis%20Data%20Replication), I check the `replication` status of the just-restarted `redis-node-0` and find the following:
 
 ```bash
+# INFO returned `master_host:redis-node-1`
 role:slave
 master_host:redis-node-1.redis-headless.redis.svc.cluster.local
 master_port:6379
@@ -293,4 +289,4 @@ Excellent, this suggests that our "new" node has joined the cluster as a slave o
 
 ## Conclusion
 
-From my perspective, this is a great starting point for learning K8s. For the purposes of the Digital Ocean K8s Challenge, this is where I'll end. As I mentioned earlier, I'd like to build logging, monitoring, and a simple application on top of this Redis cluster. I'm sure that will reveal any glaring flaws in this configuration.
+From my perspective, this is a great starting point for learning K8s. For the purposes of the Digital Ocean K8s Challenge, this is where I'll end. As I mentioned earlier, I'd like to build logging, monitoring, and a simple application on top of this Redis cluster. I'm sure that will reveal some flaws in this configuration and allow me to improve this deployment further.
